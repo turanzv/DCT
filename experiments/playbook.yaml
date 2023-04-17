@@ -1,0 +1,74 @@
+---
+- name: Install DCT
+  hosts: all
+  become: true
+  vars:
+    clang_version: "14"
+    gpp_version: "11"
+
+  tasks:
+  - name: Install clang and g++
+    apt:
+      name:
+        - clang-{{ clang_version }}
+        - g++-{{ gpp_version }}
+      state: latest
+    shell: |
+      alias cc=clang
+
+  - name: Install cmake, bison, and flex
+    apt:
+      name:
+        - cmake
+        - bison
+        - flex
+      state: latest
+
+  - name: Install fmtlib
+    shell: |
+      mkdir -p ~/code
+      cd ~/code
+      git clone https://github.com/fmtlib/fmt.git
+      cd fmt
+      mkdir build && cd build
+      cmake ..
+      make -j$(nproc)
+      sudo make install
+
+  - name: Install libsodium1.0.18
+    shell: |
+      mkdir -p ~/code
+      cd ~/code
+      wget https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
+      tar -xzvf libsodium-1.0.18.tar.gz
+      cd libsodium-1.0.18
+      ./configure --with-toolset=clang --with-libraries=all
+      make -j$(nproc)
+      sudo make install
+
+  - name: Install Boost
+    shell: |
+      mkdir -p ~/code
+      cd ~/code
+      wget https://boostorg.jfrog.io/artifactory/main/release/1.81.0/source/boost_1_81_0.tar.gz
+      tar -xzvf boost_1_81_0.tar.gz
+      cd boost_1_81_0
+      ./bootstrap --with-toolset=clang --with-libraries=all
+      sudo ./b2 install
+
+
+  - name: Clone pollere/DCT from GitHub and install tools
+    git:
+      repo: https://github.com/pollere/DCT.git
+      dest: ~/code/DCT
+    shell: |
+      cd ~/code/DCT
+      rm -rf /include/fmt
+      cd /tools
+      make
+      cd /dctwatch
+      make
+      cd ../..
+      export PATH="~/code/DCT/tools:$PATH"
+      source ~/.bashrc
+
