@@ -1,4 +1,4 @@
--- Copyright (c) 2015-2023, Regents of the University of California.
+-- Copyright (c) 2015-2019,  Regents of the University of California.
 --
 -- This file is part of ndn-tools (Named Data Networking Essential Tools).
 -- See AUTHORS.md for complete list of ndn-tools authors and contributors.
@@ -111,6 +111,33 @@ function getUriFromFinalBlockId(b)
    return getUriFromNameComponent(b.elements[1])
 end
 
+function getContentTypeDetail(b)
+   assert(b.type == 24)
+   local code = getNonNegativeInteger(b)
+
+   if code == UInt64(0) then return "BLOB"
+   elseif code == UInt64(1) then return "LINK"
+   elseif code == UInt64(2) then return "KEY"
+   elseif code == UInt64(3) then return "NACK"
+   -- DCT
+   elseif code == UInt64(42) then return "CADD"
+   else return tostring(code)
+   end
+end
+
+function getSignatureTypeDetail(b)
+   assert(b.type == 27)
+   local code = getNonNegativeInteger(b)
+
+   if code == UInt64(0) then return "DigestSha256"
+   elseif code == UInt64(1) then return "SignatureSha256WithRsa"
+   elseif code == UInt64(3) then return "SignatureSha256WithEcdsa"
+   elseif code == UInt64(4) then return "SignatureHmacWithSha256"
+   elseif code == UInt64(5) then return "SignatureEd25519"
+   else return tostring(code)
+   end
+end
+
 function getNackReasonDetail(b)
    assert(b.type == 801)
    local code = getNonNegativeInteger(b)
@@ -173,7 +200,7 @@ function getGenericBlockInfo(block)
    local name = ""
 
    -- TODO: Properly format informational message based type value reservations
-   -- (https://docs.named-data.net/NDN-packet-spec/current/types.html#reserved-ranges)
+   -- (https://named-data.net/doc/NDN-packet-spec/current/types.html#tlv-type-number-reservations)
    if (block.type <= AppPrivateBlock1) then
       name = "Unrecognized from the reserved range " .. 0 .. "-" .. AppPrivateBlock1 .. ""
    elseif (AppPrivateBlock1 < block.type and block.type < AppPrivateBlock2) then
@@ -200,7 +227,13 @@ local NDN_DICT = {
    [1]  = {name = "ImplicitSha256DigestComponent"  , field = ProtoField.string("ndn.implicit_sha256", "ImplicitSha256DigestComponent"), value = getUriFromNameComponent},
    [2]  = {name = "ParametersSha256DigestComponent", field = ProtoField.string("ndn.params_sha256", "ParametersSha256DigestComponent"), value = getUriFromNameComponent},
    [8]  = {name = "GenericNameComponent"           , field = ProtoField.string("ndn.namecomponent", "GenericNameComponent")           , value = getUriFromNameComponent},
-
+   [32] = {name = "KeywordNameComponent"           , field = ProtoField.string("ndn.keyword", "KeywordNameComponent")                 , value = getUriFromNameComponent},
+   [50] = {name = "SegmentNameComponent"           , field = ProtoField.uint64("ndn.segment", "SegmentNameComponent", base.DEC)       , value = getNonNegativeInteger},
+   [52] = {name = "ByteOffsetNameComponent"        , field = ProtoField.uint64("ndn.offset", "SegmentOffsetNameComponent", base.DEC)  , value = getNonNegativeInteger},
+   [54] = {name = "VersionNameComponent"           , field = ProtoField.uint64("ndn.version", "VersionNameComponent", base.DEC)       , value = getNonNegativeInteger},
+   [56] = {name = "TimestampNameComponent"         , field = ProtoField.uint64("ndn.timestamp", "TimestampNameComponent", base.DEC)   , value = getNonNegativeInteger},
+   [58] = {name = "SequenceNumNameComponent"       , field = ProtoField.uint64("ndn.sequence", "SequenceNumNameComponent", base.DEC)  , value = getNonNegativeInteger},
+   
    -- Interest and its sub-elements in Packet Format v0.3
    [5]  = {name = "Interest"                     , summary = true},
    [33] = {name = "CanBePrefix"                  , field = ProtoField.string("ndn.canbeprefix", "CanBePrefix")                     , value = getTrue},
@@ -210,16 +243,20 @@ local NDN_DICT = {
    [12] = {name = "InterestLifetime"             , field = ProtoField.uint64("ndn.lifetime", "InterestLifetime", base.DEC)         , value = getNonNegativeInteger},
    [34] = {name = "HopLimit"                     , field = ProtoField.uint8("ndn.hoplimit", "HopLimit", base.DEC)                  , value = getHopLimit},
    [36] = {name = "ApplicationParameters"        , field = ProtoField.bytes("ndn.app_params", "ApplicationParameters")},
+   [44] = {name = "InterestSignatureInfo"        , summary = true},
+   [46] = {name = "InterestSignatureValue"       , field = ProtoField.bytes("ndn.interest_sigvalue", "InterestSignatureValue")},
+   -- DCT
+   [37] = {name = "SequenceNum"                  , field = ProtoField.uint64("ndn.seqno", "SequenceNum", base.DEC)                 , value = getNonNegativeInteger},
 
    -- Data and its sub-elements in Packet Format v0.3
    [6]  = {name = "Data"                         , summary = true},
    [20] = {name = "MetaInfo"                     , summary = true},
-   [24] = {name = "ContentType"                  , field = ProtoField.uint64("ndn.contenttype", "ContentType", base.DEC)           , value = getNonNegativeInteger},
+   [24] = {name = "ContentType"                  , field = ProtoField.string("ndn.contenttype", "ContentType")                     , value = getContentTypeDetail},
    [25] = {name = "FreshnessPeriod"              , field = ProtoField.uint64("ndn.freshness", "FreshnessPeriod", base.DEC)         , value = getNonNegativeInteger},
    [26] = {name = "FinalBlockId"                 , field = ProtoField.string("ndn.finalblock", "FinalBlockId")                     , value = getUriFromFinalBlockId},
    [21] = {name = "Content"                      , field = ProtoField.bytes("ndn.content", "Content")},
    [22] = {name = "SignatureInfo"                , summary = true},
-   [27] = {name = "SignatureType"                , field = ProtoField.uint64("ndn.sigtype", "SignatureType", base.DEC)             , value = getNonNegativeInteger},
+   [27] = {name = "SignatureType"                , field = ProtoField.string("ndn.sigtype", "SignatureType")                       , value = getSignatureTypeDetail},
    [28] = {name = "KeyLocator"                   , summary = true},
    [29] = {name = "KeyDigest"                    , field = ProtoField.bytes("ndn.keydigest", "KeyDigest")},
    [23] = {name = "SignatureValue"               , field = ProtoField.bytes("ndn.sigvalue", "SignatureValue")},
@@ -509,8 +546,6 @@ function ndn.dissector(tvb, pInfo, root) -- Tvb, Pinfo, TreeItem
          end
       end
 
-      -- These fields can be used to get NDN-packet level information using tshark,
-      -- for example when using the dissector only for reassembling NDN packets from TCP
       block.tree:add(ndn.fields.bin, tvb(0, tvb:len())):set_hidden()
       block.tree:add(ndn.fields.len, tvb:len()):set_hidden()
       block.tree:add(ndn.fields.type, pktType):set_hidden()
@@ -531,6 +566,8 @@ end
 local udpDissectorTable = DissectorTable.get("udp.port")
 udpDissectorTable:add("6363", ndn)
 udpDissectorTable:add("56363", ndn)
+-- DCT
+udpDissectorTable:add("56362", ndn)
 
 local tcpDissectorTable = DissectorTable.get("tcp.port")
 tcpDissectorTable:add("6363", ndn)
